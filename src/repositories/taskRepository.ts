@@ -2,9 +2,19 @@ import { Container, SqlParameter } from "@azure/cosmos";
 import { randomUUID } from "node:crypto";
 import { getTasksContainer } from "../lib/cosmos";
 import { stripSystemFields } from "../lib/cosmosDocument";
-import { AppError, badRequest, conflict, cosmosErrorCode, notFound } from "../lib/errors";
+import {
+  AppError,
+  badRequest,
+  conflict,
+  cosmosErrorCode,
+  notFound,
+} from "../lib/errors";
 import { buildPatchOperations, clearsValues } from "../lib/taskPatch";
-import { pageOfSortedIds, SORT_KEY_PROJECTION, TaskSortKeys } from "../lib/taskSort";
+import {
+  pageOfSortedIds,
+  SORT_KEY_PROJECTION,
+  TaskSortKeys,
+} from "../lib/taskSort";
 import {
   CreateTaskInput,
   ListTasksQuery,
@@ -49,21 +59,21 @@ function buildFilter(
   return { where: conditions.join(" AND "), parameters };
 }
 
-/**
- * Above this many matching tasks, sorting by anything other than createdAt is refused
- * (see pageInMemory). A single organization's task list is far below this in practice.
- */
 const MAX_IN_MEMORY_SORT = 2000;
 
 interface QueryScope {
   container: Container;
-  /** The partition key: one organization. */
   organizationId: string;
   where: string;
   parameters: SqlParameter[];
 }
 
-async function countTasks({ container, organizationId, where, parameters }: QueryScope): Promise<number> {
+async function countTasks({
+  container,
+  organizationId,
+  where,
+  parameters,
+}: QueryScope): Promise<number> {
   const { resources } = await container.items
     .query<number>(
       { query: `SELECT VALUE COUNT(1) FROM c WHERE ${where}`, parameters },
@@ -73,8 +83,10 @@ async function countTasks({ container, organizationId, where, parameters }: Quer
   return resources[0] ?? 0;
 }
 
-/** Default sort: `_ts` exists on every document, so Cosmos can sort and page it directly. */
-async function pageByCreation(scope: QueryScope, query: ListTasksQuery): Promise<Task[]> {
+async function pageByCreation(
+  scope: QueryScope,
+  query: ListTasksQuery,
+): Promise<Task[]> {
   const { resources } = await scope.container.items
     .query<object>(
       {
@@ -93,15 +105,11 @@ async function pageByCreation(scope: QueryScope, query: ListTasksQuery): Promise
   return resources.map(toTask);
 }
 
-/**
- * Every other sort field. Cosmos cannot be used for these: ORDER BY silently drops documents
- * where the property is missing (a task without a due date would vanish), and it only sorts
- * strings alphabetically (priority "high" < "low" < "medium").
- *
- * So: load only the small sort keys, sort in memory, then load the full documents of the
- * requested page. The task count is checked first so memory use stays bounded.
- */
-async function pageInMemory(scope: QueryScope, query: ListTasksQuery, total: number): Promise<Task[]> {
+async function pageInMemory(
+  scope: QueryScope,
+  query: ListTasksQuery,
+  total: number,
+): Promise<Task[]> {
   if (total === 0) return [];
   if (total > MAX_IN_MEMORY_SORT) {
     throw badRequest(
@@ -112,26 +120,33 @@ async function pageInMemory(scope: QueryScope, query: ListTasksQuery, total: num
   const options = { partitionKey: scope.organizationId };
   const { resources: keys } = await scope.container.items
     .query<TaskSortKeys>(
-      { query: `SELECT ${SORT_KEY_PROJECTION} FROM c WHERE ${scope.where}`, parameters: scope.parameters },
+      {
+        query: `SELECT ${SORT_KEY_PROJECTION} FROM c WHERE ${scope.where}`,
+        parameters: scope.parameters,
+      },
       options,
     )
     .fetchAll();
 
-  const ids = pageOfSortedIds(keys, query.sortBy, query.sortOrder, query.page, query.pageSize);
+  const ids = pageOfSortedIds(
+    keys,
+    query.sortBy,
+    query.sortOrder,
+    query.page,
+    query.pageSize,
+  );
   if (ids.length === 0) return [];
 
   const { resources: documents } = await scope.container.items
-    .query<{ id: string }>(
-      { query: "SELECT * FROM c WHERE ARRAY_CONTAINS(@ids, c.id)", parameters: [{ name: "@ids", value: ids }] },
-      options,
-    )
+    .query<{
+      id: string;
+    }>({ query: "SELECT * FROM c WHERE ARRAY_CONTAINS(@ids, c.id)", parameters: [{ name: "@ids", value: ids }] }, options)
     .fetchAll();
 
-  // The page query returns documents in any order: restore the sorted order.
   const byId = new Map(documents.map((document) => [document.id, document]));
   return ids.flatMap((id) => {
     const document = byId.get(id);
-    return document ? [toTask(document)] : []; // deleted in between: just skip it
+    return document ? [toTask(document)] : [];
   });
 }
 
@@ -140,12 +155,20 @@ export async function listTasks(
   query: ListTasksQuery,
 ): Promise<PagedResult<Task>> {
   const { where, parameters } = buildFilter(organizationId, query);
-  const scope: QueryScope = { container: getTasksContainer(), organizationId, where, parameters };
+  const scope: QueryScope = {
+    container: getTasksContainer(),
+    organizationId,
+    where,
+    parameters,
+  };
 
   let total: number;
   let items: Task[];
   if (query.sortBy === "createdAt") {
-    [total, items] = await Promise.all([countTasks(scope), pageByCreation(scope, query)]);
+    [total, items] = await Promise.all([
+      countTasks(scope),
+      pageByCreation(scope, query),
+    ]);
   } else {
     total = await countTasks(scope);
     items = await pageInMemory(scope, query, total);
@@ -196,8 +219,6 @@ export async function updateTask(
 ): Promise<Task> {
   const item = getTasksContainer().item(id, organizationId);
 
-  // Clearing a value removes the property, which Cosmos only allows if it exists:
-  // read the stored task first (only needed in that case).
   let existing: object | undefined;
   if (clearsValues(changes)) {
     const { resource } = await item.read<object>();
@@ -206,8 +227,8 @@ export async function updateTask(
   }
 
   const operations = buildPatchOperations(changes, existing);
-  // Only possible when every change cleared a value that was already empty.
-  if (operations.length === 0) return existing ? toTask(existing) : getTask(id, organizationId);
+  if (operations.length === 0)
+    return existing ? toTask(existing) : getTask(id, organizationId);
 
   try {
     const { resource } = await item.patch<object>(operations);
@@ -252,7 +273,8 @@ export async function bulkDeleteTasks(
       result.deleted.push(id);
       return;
     }
-    const missing = outcome.reason instanceof AppError && outcome.reason.status === 404;
+    const missing =
+      outcome.reason instanceof AppError && outcome.reason.status === 404;
     result.failed.push({ id, reason: missing ? "not_found" : "error" });
   });
   return result;

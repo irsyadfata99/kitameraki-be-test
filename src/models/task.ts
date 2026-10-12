@@ -62,7 +62,6 @@ export const createTaskSchema = taskFields
   .strict();
 
 export const updateTaskSchema = taskFields
-  // In a PATCH, `null` clears an optional value; omitting the key leaves it unchanged.
   .extend({
     dueDate: dueDate.nullable().optional(),
     priority: priority.nullable().optional(),

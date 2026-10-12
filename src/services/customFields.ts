@@ -15,10 +15,6 @@ export interface CustomFieldIssue {
   message: string;
 }
 
-/**
- * Pure check of task custom field values against the form's fields: every id must be a custom
- * field of the form, and every non-empty value must match the field's type.
- */
 export function validateCustomFieldValues(
   fields: FormField[],
   values: Record<string, string>,
