@@ -44,6 +44,12 @@
         "maxLength": 50
       },
       "description": "Tags associated with the task"
+    },
+    "customFields": {
+      "type": "object",
+      "propertyNames": { "format": "uuid" },
+      "additionalProperties": { "type": "string", "maxLength": 1000 },
+      "description": "Values of custom form fields (see form settings), keyed by custom field id"
     }
   },
   "required": ["id", "organizationId", "title", "status"],

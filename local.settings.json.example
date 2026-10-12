@@ -1,0 +1,15 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "COSMOS_CONNECTION_STRING": "AccountEndpoint=https://<account>.documents.azure.com:443/;AccountKey=<key>;",
+    "COSMOS_DATABASE": "TaskApp",
+    "COSMOS_TASKS_CONTAINER": "Tasks",
+    "COSMOS_FORM_SETTINGS_CONTAINER": "FormSettings"
+  },
+  "Host": {
+    "LocalHttpPort": 7071,
+    "CORS": "http://localhost:5173"
+  }
+}
